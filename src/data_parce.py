@@ -2,7 +2,7 @@ import pandas as pd
 from nltk import word_tokenize
 from sklearn.feature_extraction import text
 from string import punctuation, digits
-from lemmatization import lemmatize_text_no_POS # потом нужно будет сделать функцию с POS и протестировать, будуи ли отличия
+from src.lemmatization import lemmatize_text_no_POS # потом нужно будет сделать функцию с POS и протестировать, будуи ли отличия
 
 def print_base_info(df):
     """вывод общей информации о датасете"""
@@ -19,7 +19,7 @@ def print_col(cnt: int, df, rows: list):
     '''вывод первых cnt строк датафрейма из столбцов rows'''
     print(df[rows].head(cnt))
 
-raw_data = pd.read_csv('db_fake_reviews_detection_project/fake reviews dataset.csv')
+raw_data = pd.read_csv('db_fake_reviews_detection_project/data/raw/fake_reviews_dataset.csv')
 
 clear_data = raw_data
 stop_words = text.ENGLISH_STOP_WORDS
