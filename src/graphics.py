@@ -1,4 +1,4 @@
-from data_parce import clear_data
+from src.data_parce import clear_data
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 
