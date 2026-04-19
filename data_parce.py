@@ -2,6 +2,7 @@ import pandas as pd
 from nltk import word_tokenize
 from sklearn.feature_extraction import text
 from string import punctuation, digits
+from lemmatization import lemmatize_text_no_POS # потом нужно будет сделать функцию с POS и протестировать, будуи ли отличия
 
 def print_base_info(df):
     """вывод общей информации о датасете"""
@@ -30,13 +31,12 @@ clear_data['text_'] = (
     .str.lower()
     .replace(rf'[{punctuation}{digits}\n]', ' ', regex=True)
     .replace('  ',' ')
-    .apply(lambda x: ' '.join([word for word in word_tokenize(x) if word not in stop_words]))
+    .apply(lambda x: ' '.join([lemmatize_text_no_POS(word) for word in word_tokenize(x) if word not in stop_words])) #с лемматизацией по отдельным словам
 )
 
 
 # print_base_info(clear_data)
 
-# print('//////////////////////////////////////////////////////////')
+# print('\n//////////////////////////////////////////////////////////\n')
 
 # print_col(5, clear_data, ['text_'])
-print_base_info(clear_data)
