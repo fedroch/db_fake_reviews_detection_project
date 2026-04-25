@@ -32,7 +32,7 @@ excluded_stopwords = set([word.rstrip() for word in open(script_dir / 'stopwords
 stop_words = stop_words.union(added_stopwords).difference(excluded_stopwords)
 clear_data['text_'] = (
     clear_data['text_']
-    .str.lower()
+    # .str.lower() # почему-то без приведения к нижнему регистру скор модели больше
     .replace(rf'[{punctuation}{digits}\n]', ' ', regex=True)
     .replace('  ',' ')
     .apply(lambda x: ' '.join([lemmatize_text_no_POS(word) for word in word_tokenize(x) if word not in stop_words])) #с лемматизацией по отдельным словам
