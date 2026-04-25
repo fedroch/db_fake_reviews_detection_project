@@ -23,7 +23,7 @@ def print_col(cnt: int, df, rows: list):
     print(df[rows].head(cnt))   
 
 script_dir = Path(__file__).parent.parent
-raw_data = pd.read_csv(script_dir / 'data/raw/fake reviews dataset.csv')
+raw_data = pd.read_csv(script_dir / 'data/raw/fake_reviews_dataset.csv')
 
 clear_data = raw_data
 stop_words = text.ENGLISH_STOP_WORDS
