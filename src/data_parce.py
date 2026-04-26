@@ -3,6 +3,7 @@ from nltk import word_tokenize
 from sklearn.feature_extraction import text
 from string import punctuation, digits
 from src.lemmatization import lemmatize_text_no_POS # потом нужно будет сделать функцию с POS и протестировать, будуи ли отличия
+from src.stemming import word_stem 
 
 def print_base_info(df):
     """вывод общей информации о датасете"""
