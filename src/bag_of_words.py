@@ -9,7 +9,7 @@ vectorizer = CountVectorizer(
     token_pattern=r'\b\w+\b', # хз чё это но надо
     # min_df=5, # убираем слова встреченные <5 раз
     ngram_range=(1, 2), # ищем пары слов и одиночные
-    max_features=5000 # оставляем 5000 самых частотных слов (ало видюха, иди нахуй)
+    max_features=5000 # оставляем 5000 самых частотных слов (ало проц ...(цензура))
 )
 
 X_train_raw, X_test_raw, y_train, y_test = train_test_split(
