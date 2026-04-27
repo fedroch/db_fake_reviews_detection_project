@@ -1,8 +1,15 @@
-from src.data_parce import clear_data
+from data_parce import clear_data
 import pandas as pd
+import joblib
+from pathlib import Path
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report, accuracy_score
+import matplotlib.pyplot as plt
+
+MODELS_DIR = Path(__file__).parent.parent / 'models'
+MODELS_DIR.mkdir(exist_ok=True)
 
 vectorizer = CountVectorizer(
     lowercase=False, # текст уже распарщен, так что все итак в нижнем регистре
@@ -25,11 +32,30 @@ X_test = vectorizer.transform(X_test_raw)
 logistic_model = LogisticRegression(max_iter=1000)
 logistic_model.fit(X_train, y_train)
 
-from sklearn.metrics import classification_report, accuracy_score
-
-# Предсказываем на тех данных, которые модель еще не видела
 predictions = logistic_model.predict(X_test)
+
+
+joblib.dump({'model': logistic_model, 'vectorizer': vectorizer},
+            MODELS_DIR / 'bag_of_words.pkl')
+print(f"Модель сохранена в {MODELS_DIR / 'bag_of_words.pkl'}")
 
 print(f"Общая точность (Accuracy): {accuracy_score(y_test, predictions):.2%}")
 print("\nПодробный отчет:")
 print(classification_report(y_test, predictions))
+
+
+from graphics import (
+    plot_confusion_matrix,
+    plot_top_words,
+    plot_metrics_by_class,
+    plot_proba_histogram,
+    plot_roc_curve,
+)
+
+plot_confusion_matrix(y_test, predictions)
+plot_top_words(vectorizer, logistic_model, n=15)
+plot_metrics_by_class(y_test, predictions)
+plot_proba_histogram(logistic_model, X_test, y_test)
+plot_roc_curve(logistic_model, X_test, y_test)
+
+plt.show()
