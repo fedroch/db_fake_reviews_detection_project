@@ -14,15 +14,15 @@ MODELS_DIR.mkdir(exist_ok=True)
 vectorizer = CountVectorizer(
     lowercase=False, # текст уже распарщен, так что все итак в нижнем регистре
     token_pattern=r'\b\w+\b', # хз чё это но надо
-    min_df=5, # убираем слова встреченные <5 раз
+    # min_df=5, # убираем слова встреченные <5 раз
     ngram_range=(1, 2), # ищем пары слов и одиночные
-    max_features=2000 # оставляем 2000 самых частотных слов (ало видюха, иди нахуй)
+    max_features=5000 # оставляем 5000 самых частотных слов (ало видюха, иди нахуй)
 )
 
 X_train_raw, X_test_raw, y_train, y_test = train_test_split(
-    clear_data['text_'],
-    clear_data['label'],
-    test_size=0.2,
+    clear_data['text_'], 
+    clear_data['label'], 
+    test_size=0.2, 
     random_state=42
 )
 
