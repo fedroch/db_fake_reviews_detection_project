@@ -41,6 +41,7 @@ requests==2.33.1
 rich==15.0.0
 scikit-learn==1.8.0
 scipy==1.17.1
+seaborn==0.13.2
 setuptools==82.0.1
 shellingham==1.5.4
 six==1.17.0
