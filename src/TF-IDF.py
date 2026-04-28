@@ -1,8 +1,8 @@
-from data_parce import clear_data
+from src.data_parce import clear_data
 import pandas as pd
 import joblib
 from pathlib import Path
-from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, accuracy_score
@@ -11,10 +11,12 @@ import matplotlib.pyplot as plt
 MODELS_DIR = Path(__file__).parent.parent / 'models'
 MODELS_DIR.mkdir(exist_ok=True)
 
-vectorizer = CountVectorizer(
+
+vectorizer = TfidfVectorizer(
     lowercase=False, # текст уже распарщен, так что все итак в нижнем регистре
-    token_pattern=r'\b\w+\b', # хз чё это но надо
+    token_pattern=r'\b\w+\b', # по дефолту удаляет одиночные символы (тут они остаются)
     # min_df=5, # убираем слова встреченные <5 раз
+    sublinear_tf=True, # по сравнению с bag_of_words поменялось только это (и то не помогло)
     ngram_range=(1, 2), # ищем пары слов и одиночные
     max_features=5000 # оставляем 5000 самых частотных слов (ало проц ...(цензура))
 )
@@ -32,8 +34,10 @@ X_test = vectorizer.transform(X_test_raw)
 logistic_model = LogisticRegression(max_iter=1000)
 logistic_model.fit(X_train, y_train)
 
-predictions = logistic_model.predict(X_test)
+from sklearn.metrics import classification_report, accuracy_score
 
+# Предсказываем на тех данных, которые модель еще не видела
+predictions = logistic_model.predict(X_test)
 
 joblib.dump({'model': logistic_model, 'vectorizer': vectorizer},
             MODELS_DIR / 'bag_of_words.pkl')
