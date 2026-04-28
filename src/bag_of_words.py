@@ -1,4 +1,4 @@
-from src.data_parce import clear_data
+from data_parce import clear_data
 import pandas as pd
 import joblib
 from pathlib import Path
@@ -32,9 +32,8 @@ X_test = vectorizer.transform(X_test_raw)
 logistic_model = LogisticRegression(max_iter=1000)
 logistic_model.fit(X_train, y_train)
 
-from sklearn.metrics import classification_report, accuracy_score
-
 predictions = logistic_model.predict(X_test)
+
 
 joblib.dump({'model': logistic_model, 'vectorizer': vectorizer},
             MODELS_DIR / 'bag_of_words.pkl')

@@ -27,7 +27,7 @@
 
 ---
 
-## 📊 Данные
+##  Данные
 
 **Источник:** [Fake Reviews Dataset — Kaggle](https://www.kaggle.com)
 
@@ -48,7 +48,7 @@
     ▼
 ┌─────────────────────────┐
 │  EDA & Анализ           │  Распределение классов, длины текстов,
-│                         │  топ-слова, n-gram анализ
+│                         │  стоп-слова, n-gram анализ
 └────────────┬────────────┘
              │
              ▼
@@ -102,8 +102,8 @@
 ### 1. Клонировать репозиторий
 
 ```bash
-git clone https://github.com/your-username/fake-review-detector.git
-cd fake-review-detector
+git clone https://github.com/fedroch/db_fake_reviews_detection_project/.git
+cd db_fake_reviews_detection_project
 ```
 
 ### 2. Установить зависимости
@@ -111,12 +111,6 @@ cd fake-review-detector
 ```bash
 pip install -r requirements.txt
 ```
-
-### 3. Скачать данные
-
-Скачайте датасет с [Kaggle](https://www.kaggle.com) и поместите CSV-файл в папку `data/raw/`.
-
-### 4. Запустить пайплайн
 
 ## Стек технологий
 
@@ -146,9 +140,8 @@ wordcloud
 
 | Участник | Роль |
 |---|---|
-| Участник А | ML-инженер · обучение моделей, метрики |
-| Участник Б | NLP / EDA · предобработка, TF-IDF |
-| Участник В | Аналитика · признаки, визуализации |
+| Алексей Василев | ML-инженер · обучение моделей, метрики |
+| Федор Чечик | NLP / EDA · предобработка, TF-IDF |
 
 ---
 
@@ -157,7 +150,7 @@ wordcloud
 - [x] Постановка задачи и выбор датасета
 - [x] Описание пайплайна и признаков
 - [ ] EDA + анализ дисбаланса классов
-- [ ] Предобработка текста
+- [x] Предобработка текста
 - [ ] Feature engineering (TF-IDF + структурные)
 - [ ] Baseline-модели (LogReg, NaiveBayes)
 - [ ] Random Forest + оценка метрик
