@@ -2,7 +2,7 @@ from src.data_parce import clear_data
 import pandas as pd
 import joblib
 from pathlib import Path
-from sklearn.feature_extraction.text import TfidfVectorizer # по сравнению с bag_of_words поменялось только это (на удивление работает хуже)
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, accuracy_score
