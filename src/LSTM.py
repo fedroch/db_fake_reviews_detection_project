@@ -9,6 +9,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
 from pathlib import Path
 from src.data_parce import clear_data as data
+import json
 
 # data = pd.read_csv(Path(__file__).parent.parent / 'data/raw/fake_reviews_dataset.csv')
 
@@ -153,9 +154,28 @@ print(f"Общая точность (Accuracy): {accuracy_score(true, preds):.2%
 print("\nПодробный отчет:")
 print(classification_report(true, preds))
 
+
+def save_lstm_pretrained(model, tokenizer, save_dir):
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    # 1. Сохраняем веса модели
+    weights_path = save_dir / 'pytorch_LSTM_model.bin'
+    torch.save(model.state_dict(), weights_path)
+    # 2. Сохраняем конфиг архитектуры (чтобы знать размеры слоев при загрузке)
+    config = {
+        "vocab_size": model.embedding.num_embeddings,
+        "emb_dim": model.embedding.embedding_dim,
+        "hidden_dim": model.lstm.hidden_size,
+        # "num_layers": model.lstm.num_layers,
+        "bidirectional": model.lstm.bidirectional
+    }
+    with open(save_dir / 'LSTM_config.json', 'w', encoding='utf-8') as f:
+        json.dump(config, f, indent=4)
+    with open(save_dir / 'LSTM_vocab.json', 'w', encoding='utf-8') as f:
+        json.dump(tokenizer.word2id, f, ensure_ascii=False, indent=4)
+    print(f"\nМодель и токенизатор сохранены в {save_dir}")
+
 MODELS_DIR = Path(__file__).parent.parent / 'models'
 MODELS_DIR.mkdir(exist_ok=True)
-
 save_path = MODELS_DIR / 'LSTM'
-torch.save(model.state_dict(), save_path)
-print(f"\nМодель сохранена в {save_path}")
+save_lstm_pretrained(model, tokenizer, save_path)
