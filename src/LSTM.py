@@ -8,10 +8,29 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
 from pathlib import Path
-from src.data_parce import clear_data as data
+# from src.data_parce import clear_data as data
 import json
 
-# data = pd.read_csv(Path(__file__).parent.parent / 'data/raw/fake_reviews_dataset.csv')
+# data = pd.read_csv(Path(__file__).parent.parent / 'data/raw/fake reviews dataset.csv')
+
+def load_lstm_pretrained(save_dir, device):
+    save_dir = Path(save_dir)
+    with open(save_dir / 'LSTM_config.json', 'r', encoding='utf-8') as f:
+        config = json.load(f)
+    with open(save_dir / 'LSTM_vocab.json', 'r', encoding='utf-8') as f:
+        word2id = json.load(f)
+    tokenizer = custom_tokenizer(max_vocab_size=config["vocab_size"])
+    tokenizer.word2id = word2id
+    tokenizer.id2word = {int(v): k for k, v in word2id.items()}
+    model = LSTM(
+        vocab_size=config["vocab_size"], 
+        emb_dim=config["emb_dim"], 
+        hidden_dim=config["hidden_dim"]
+    )
+    model.load_state_dict(torch.load(save_dir / 'pytorch_LSTM_model.bin', map_location=device))
+    model.to(device)
+    model.eval()
+    return model, tokenizer
 
 def load_glove_embeddings(word2id, glove_path, emb_dim=100):
     vocab_size = len(word2id)
@@ -37,22 +56,6 @@ def load_glove_embeddings(word2id, glove_path, emb_dim=100):
                     continue           
     print(f"Загрузка окончена. Успешно: {hits}, Пропущено: {misses}")      
     return torch.from_numpy(embedding_matrix).float()
-
-if torch.cuda.is_available():
-    device = torch.device("cuda")
-    print(f"Ползем на GPU: {torch.cuda.get_device_name(0)}")
-else:
-    device = torch.device("cpu")
-    print("Увы, всё еще на процессоре...")
-
-data['label'] = data['label'].map({'OR': 0, 'CG': 1})
-
-X_train, X_test, y_train, y_test = train_test_split(
-    data['text_'], 
-    data['label'], 
-    test_size=0.2, 
-    random_state=42
-)
 
 class custom_tokenizer:
     def __init__(self, max_vocab_size=5000):
@@ -133,27 +136,10 @@ def run_pipeline(X_train, y_train):
     model = LSTM(vocab_size=5000, emb_dim=emb_dim, hidden_dim=256, pretrained_weights=weights)
     model.to(device)
     # Обучение
-    print("Рецепт яичницы на видеокарте: возьмите 1 модель LSTM, добавьте капельку слез и приправьте 10 эпохами обучения. Подавайте горячим!")
+    print("Рецепт иишницы на видеокарте: возьмите 1 модель LSTM, добавьте капельку слез и приправьте 10 эпохами обучения. Подавайте горячим!")
     train_model(model, train_loader, device, epochs=15)
     
     return model, tokenizer
-
-model, tokenizer = run_pipeline(X_train, y_train)
-
-tests_loader = DataLoader(ReviewDataset(X_test, y_test, tokenizer, max_len=250), batch_size=128, shuffle=False)
-preds, true = [], []
-model.eval()
-with torch.no_grad():
-    for texts, labels in tests_loader:
-        texts, labels = texts.to(device), labels.to(device)
-        outputs = model(texts)
-        _, predicted = torch.max(outputs, 1)
-        preds.extend(predicted.cpu().numpy())
-        true.extend(labels.cpu().numpy())
-print(f"Общая точность (Accuracy): {accuracy_score(true, preds):.2%}")
-print("\nПодробный отчет:")
-print(classification_report(true, preds))
-
 
 def save_lstm_pretrained(model, tokenizer, save_dir):
     save_dir = Path(save_dir)
@@ -175,7 +161,38 @@ def save_lstm_pretrained(model, tokenizer, save_dir):
         json.dump(tokenizer.word2id, f, ensure_ascii=False, indent=4)
     print(f"\nМодель и токенизатор сохранены в {save_dir}")
 
-MODELS_DIR = Path(__file__).parent.parent / 'models'
-MODELS_DIR.mkdir(exist_ok=True)
-save_path = MODELS_DIR / 'LSTM'
-save_lstm_pretrained(model, tokenizer, save_path)
+if __name__ == "__main__":
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        print(f"Ползем на GPU: {torch.cuda.get_device_name(0)}")
+    else:
+        device = torch.device("cpu")
+        print("Увы, всё еще на процессоре...")
+
+    data['label'] = data['label'].map({'OR': 0, 'CG': 1})
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        data['text_'], 
+        data['label'], 
+        test_size=0.2, 
+        random_state=42
+    )
+    model, tokenizer = run_pipeline(X_train, y_train)
+
+    tests_loader = DataLoader(ReviewDataset(X_test, y_test, tokenizer, max_len=250), batch_size=128, shuffle=False)
+    preds, true = [], []
+    model.eval()
+    with torch.no_grad():
+        for texts, labels in tests_loader:
+            texts, labels = texts.to(device), labels.to(device)
+            outputs = model(texts)
+            _, predicted = torch.max(outputs, 1)
+            preds.extend(predicted.cpu().numpy())
+            true.extend(labels.cpu().numpy())
+    print(f"Общая точность (Accuracy): {accuracy_score(true, preds):.2%}")
+    print("\nПодробный отчет:")
+    print(classification_report(true, preds))
+    MODELS_DIR = Path(__file__).parent.parent / 'models'
+    MODELS_DIR.mkdir(exist_ok=True)
+    save_path = MODELS_DIR / 'LSTM'
+    save_lstm_pretrained(model, tokenizer, save_path)
