@@ -1,0 +1,6 @@
+{
+    "vocab_size": 5000,
+    "emb_dim": 100,
+    "hidden_dim": 256,
+    "bidirectional": true
+}
