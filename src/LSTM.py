@@ -8,7 +8,8 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
 from pathlib import Path
-# from src.data_parce import clear_data as data
+from transformers import get_scheduler
+from src.data_parce import clear_data as data
 import json
 
 # data = pd.read_csv(Path(__file__).parent.parent / 'data/raw/fake reviews dataset.csv')
@@ -58,7 +59,7 @@ def load_glove_embeddings(word2id, glove_path, emb_dim=100):
     return torch.from_numpy(embedding_matrix).float()
 
 class custom_tokenizer:
-    def __init__(self, max_vocab_size=5000):
+    def __init__(self, max_vocab_size=10000):
         self.max_vocab_size = max_vocab_size
         self.word2id = {'<PAD>': 0, '<UNK>': 1}
         self.id2word = {0: '<PAD>', 1: '<UNK>'}
@@ -77,15 +78,17 @@ class custom_tokenizer:
 class ReviewDataset(Dataset):
     def __init__(self, texts, labels, tokenizer, max_len=250):
         self.data = [torch.tensor(tokenizer.encode(text, max_len)) for text in texts]
-        self.labels = torch.tensor(labels.values,dtype=torch.long)
+        self.lengths = [min(len(str(text).split()), max_len) for text in texts]
+        self.labels = torch.tensor(labels.values, dtype=torch.long)
     def __len__(self):
         return len(self.labels)
     def __getitem__(self, idx):
         text = self.data[idx]
+        length = torch.tensor(self.lengths[idx], dtype=torch.long)
         label = self.labels[idx]
-        return text, label
+        return text, length, label
 class LSTM(nn.Module):
-    def __init__(self, vocab_size=5000, emb_dim=128, hidden_dim=128, pretrained_weights=None):
+    def __init__(self, vocab_size=10000, emb_dim=128, hidden_dim=128, pretrained_weights=None):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, emb_dim, padding_idx=0)
         if pretrained_weights is not None:
@@ -93,35 +96,100 @@ class LSTM(nn.Module):
         self.lstm = nn.LSTM(emb_dim, hidden_dim, batch_first=True, bidirectional=True, num_layers=2, dropout=0.3)
         self.fc = nn.Linear(hidden_dim*2, 2)
         self.dropout = nn.Dropout(0.5)
-    def forward(self, x):
+    def forward(self, x, lengths):
         embedded = self.embedding(x)
         out, _ = self.lstm(embedded)
+        max_len = x.size(1)
+        mask = torch.arange(max_len, device=x.device).unsqueeze(0) < lengths.unsqueeze(1)
+        out = out.masked_fill(~mask.unsqueeze(-1), float('-inf'))
         pooled, _ = torch.max(out, dim=1)
+        pooled = torch.where(torch.isinf(pooled), torch.zeros_like(pooled), pooled)
         return self.fc(self.dropout(pooled))
 
-def train_model(model, train_loader, device, epochs=20):
-    optimizer = optim.Adam(model.parameters(),weight_decay=1e-5, lr=0.001)
+def evaluate_model(model, data_loader, device, criterion=None):
+    model.eval()
+    losses, all_preds, all_labels = [], [], []
+    with torch.no_grad():
+        for texts, lengths, labels in data_loader:
+            texts = texts.to(device)
+            lengths = lengths.to(device)
+            labels = labels.to(device)
+            outputs = model(texts, lengths)
+            if criterion is not None:
+                losses.append(criterion(outputs, labels).item())
+            preds = outputs.argmax(dim=1)
+            all_preds.extend(preds.cpu().tolist())
+            all_labels.extend(labels.cpu().tolist())
+    loss = float(np.mean(losses)) if losses else None
+    acc = accuracy_score(all_labels, all_preds) if all_labels else 0.0
+    return loss, acc, all_preds, all_labels
+
+def train_model(model, train_loader, val_loader, device, epochs=15, patience=5):
+    optimizer = optim.AdamW(model.parameters(),weight_decay=0.001, lr=1e-3)
+    num_training_steps = epochs * len(train_loader)
+    num_warmup_steps = num_training_steps // 10
+    scheduler = get_scheduler(
+        "linear",
+        optimizer=optimizer,
+        num_warmup_steps=num_warmup_steps,
+        num_training_steps=num_training_steps
+    )
     criterion = nn.CrossEntropyLoss()
-    
-    model.train()
+    best_val_loss = float('inf')
+    best_val_acc = 0.0
+    best_state = None
+    epochs_without_improvement = 0
+
     for epoch in range(epochs):
-        total_loss =0
-        for texts, labels in train_loader:
-            texts, labels = texts.to(device), labels.to(device)
+        model.train()
+        total_loss = 0
+        train_preds, train_true = [], []
+        for texts, lengths, labels in train_loader:
+            texts = texts.to(device)
+            lengths = lengths.to(device)
+            labels = labels.to(device)
             optimizer.zero_grad()
-            outputs = model(texts)
+            outputs = model(texts, lengths)
             loss = criterion(outputs, labels)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
+            scheduler.step()
             total_loss += loss.item()
-        print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss/len(train_loader):.4f}")
+            train_preds.extend(outputs.argmax(dim=1).detach().cpu().tolist())
+            train_true.extend(labels.detach().cpu().tolist())
 
-def run_pipeline(X_train, y_train):
+        train_loss = total_loss / len(train_loader)
+        train_acc = accuracy_score(train_true, train_preds)
+        val_loss, val_acc, _, _ = evaluate_model(model, val_loader, device, criterion)
+        print(
+            f"Epoch {epoch+1}/{epochs}, "
+            f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.2%}, "
+            f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.2%}"
+        )
+
+        improved = (val_acc > best_val_acc) or (val_acc == best_val_acc and val_loss < best_val_loss)
+        if improved:
+            best_val_loss = val_loss
+            best_val_acc = val_acc
+            best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement >= patience:
+                print(f"Early stopping: нет улучшений val_acc {patience} эпох(и) подряд.")
+                break
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
+        print(f"Загружена лучшая модель: Val Acc {best_val_acc:.2%}, Val Loss {best_val_loss:.4f}")
+
+def run_pipeline(X_train, y_train, X_val, y_val):
     # импорт ембедингов
     emb_dim = 100
     glove_path = Path(__file__).parent.parent / 'data/embeddings/glove.6B.100d.txt'
     # Токенизация
-    tokenizer = custom_tokenizer(max_vocab_size=5000)
+    tokenizer = custom_tokenizer(max_vocab_size=10000)
     tokenizer.build_vocab(X_train)
     if glove_path.exists():
         weights = load_glove_embeddings(tokenizer.word2id, glove_path, emb_dim=emb_dim)
@@ -129,15 +197,17 @@ def run_pipeline(X_train, y_train):
         print(f"Файл с эмбеддингами не найден по пути {glove_path}. модель обучается с нуля")
         weights = None
     # Загрузчики данных
-    train_ds = ReviewDataset(X_train, y_train, tokenizer, max_len=250)
+    train_ds = ReviewDataset(X_train, y_train, tokenizer, max_len=128)
+    val_ds = ReviewDataset(X_val, y_val, tokenizer, max_len=128)
     train_loader = DataLoader(train_ds, batch_size=128, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=128, shuffle=False)
     
     # Инициализация модели
-    model = LSTM(vocab_size=5000, emb_dim=emb_dim, hidden_dim=256, pretrained_weights=weights)
+    model = LSTM(vocab_size=len(tokenizer.word2id), emb_dim=emb_dim, hidden_dim=128, pretrained_weights=weights)
     model.to(device)
     # Обучение
-    print("Рецепт иишницы на видеокарте: возьмите 1 модель LSTM, добавьте капельку слез и приправьте 10 эпохами обучения. Подавайте горячим!")
-    train_model(model, train_loader, device, epochs=15)
+    print("Рецепт иишницы на видеокарте: возьмите 1 модель LSTM, добавьте капельку слез и приправьте 25 эпохами обучения. Подавайте горячим!")
+    train_model(model, train_loader, val_loader, device, epochs=25, patience=5)
     
     return model, tokenizer
 
@@ -175,20 +245,21 @@ if __name__ == "__main__":
         data['text_'], 
         data['label'], 
         test_size=0.2, 
-        random_state=42
+        random_state=42,
+        stratify=data['label']
     )
-    model, tokenizer = run_pipeline(X_train, y_train)
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_train,
+        y_train,
+        test_size=0.10,
+        random_state=42,
+        stratify=y_train
+    )
 
-    tests_loader = DataLoader(ReviewDataset(X_test, y_test, tokenizer, max_len=250), batch_size=128, shuffle=False)
-    preds, true = [], []
-    model.eval()
-    with torch.no_grad():
-        for texts, labels in tests_loader:
-            texts, labels = texts.to(device), labels.to(device)
-            outputs = model(texts)
-            _, predicted = torch.max(outputs, 1)
-            preds.extend(predicted.cpu().numpy())
-            true.extend(labels.cpu().numpy())
+    model, tokenizer = run_pipeline(X_train, y_train, X_val, y_val)
+
+    tests_loader = DataLoader(ReviewDataset(X_test, y_test, tokenizer, max_len=128), batch_size=128, shuffle=False)
+    _, _, preds, true = evaluate_model(model, tests_loader, device)
     print(f"Общая точность (Accuracy): {accuracy_score(true, preds):.2%}")
     print("\nПодробный отчет:")
     print(classification_report(true, preds))

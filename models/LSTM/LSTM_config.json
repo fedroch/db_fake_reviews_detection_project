@@ -1,6 +1,6 @@
 {
-    "vocab_size": 5000,
+    "vocab_size": 10000,
     "emb_dim": 100,
-    "hidden_dim": 256,
+    "hidden_dim": 128,
     "bidirectional": true
 }
