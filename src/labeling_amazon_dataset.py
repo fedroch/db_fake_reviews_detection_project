@@ -3,12 +3,14 @@ import pandas as pd
 import tqdm
 from pathlib import Path
 from datasets import load_dataset
-from src.LSTM import load_lstm_pretrained
+from transformers import BertTokenizerFast, BertForSequenceClassification
 
 def generate_pseudo_labels(categories, sample_pct=0.01, threshold=0.95):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_path = Path(__file__).parent.parent / 'models/LSTM'
-    model, tokenizer = load_lstm_pretrained(model_path, device)
+    model_path = Path(__file__).parent.parent / 'models/bert_finetuned'
+    tokenizer = BertTokenizerFast.from_pretrained(model_path)
+    model = BertForSequenceClassification.from_pretrained(model_path)
+    model.to(device)
     model.eval()
     all_dfs = [] # Будем собирать список DataFrame
     for cat in categories:
@@ -24,17 +26,22 @@ def generate_pseudo_labels(categories, sample_pct=0.01, threshold=0.95):
         labeled_texts, labeled_scores, labeled_ratings = [], [], []
         with torch.no_grad():
             # Шаг 128 для батчей
-            for i in tqdm.tqdm(range(0, len(dataset), 128)):
-                batch = dataset[i : i + 128]
+            for i in tqdm.tqdm(range(0, len(dataset), 16)):
+                batch = dataset[i : i + 16]
                 texts_raw = batch['text']
                 texts_raw = [str(t) if t is not None else "" for t in batch['text']]
                 ratings_raw = batch['rating']
+                inputs = tokenizer(
+                    texts_raw, 
+                    padding=True, 
+                    truncation=True, 
+                    max_length=128, # Как при обучении
+                    return_tensors='pt'
+                ).to(device)
                 # Токенизация и инференс
-                encoded = [tokenizer.encode(t, max_len=250) for t in texts_raw]
-                input_ids = torch.tensor(encoded).to(device)
-                logits = model(input_ids)
-                probs = torch.softmax(logits, dim=1)
-                max_probs, preds = torch.max(probs, dim=1)      
+                outputs = model(**inputs)
+                probs = torch.softmax(outputs.logits, dim=1)
+                max_probs, preds = torch.max(probs, dim=1)  
                 # Фильтруем только уверенные предсказания
                 for j, prob in enumerate(max_probs):
                     if prob >= threshold:
