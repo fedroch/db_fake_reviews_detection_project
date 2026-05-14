@@ -1,4 +1,4 @@
-from data_parce import clear_data
+from src.data_parce import clear_data, raw_data
 from wordcloud import WordCloud
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -53,7 +53,7 @@ def frequency_distribution(data, column):
     all_words = ' '.join(data[column]).split()
     freq_dist = FreqDist(all_words)
     fig, ax = plt.subplots(figsize=(10, 5))
-    freq_dist.plot(30, cumulative=False, ax=ax, show=False)  # show=False отключает авто-plt.show() внутри nltk
+    freq_dist.plot(30, cumulative=False,show=False)  # show=False отключает авто-plt.show() внутри nltk
     ax.set_title(f'Распределение частот для {column}')
     ax.set_xlabel('Слова')
     ax.set_ylabel('Частота')
@@ -214,9 +214,33 @@ def plot_roc_curve(model, X_test, y_test):
     print(f"График сохранён: {FIGURES_DIR / 'roc_curve.png'}")
     plt.close(fig)
 
+def punctuation_distribution(data_raw):
+    '''Функция для анализа плотности знаков препинания по классам'''
+    from string import punctuation
+    import seaborn as sns
+    import re
+    df = data_raw.copy()
+    punc_pattern = f"[{re.escape(punctuation)}]"
+    df['text_punc'] = df['text_'].str.count(punc_pattern).fillna(0)
+    df['text_len'] = df['text_'].str.len().replace(0, 1)
+    df['punc_density'] = (df['text_punc'] / df['text_len']) * 100
+    fig, ax = plt.subplots(1, 2, figsize=(14, 5))
+    sns.barplot(data=df, x='label', y='punc_density', hue='label', palette=['steelblue', 'tomato'], ax=ax[0], legend=False)
+    ax[0].set_title('Средняя плотность знаков (%)')
+    ax[0].set_ylabel('Процент пунктуации в тексте')
+    sns.kdeplot(data=df, x='punc_density', hue='label', fill=True, palette=['steelblue', 'tomato'], ax=ax[1])
+    ax[1].set_title('Распределение плотности знаков')
+    upper_limit = df['punc_density'].quantile(0.99)
+    ax[1].set_xlim(0, upper_limit)
+    fig.tight_layout()
+    fig.savefig(FIGURES_DIR / 'text_punctuation_distribution.png', dpi=150, bbox_inches='tight')
+    print(f"График сохранён: {FIGURES_DIR / 'text_punctuation_distribution.png'}")
+    plt.close(fig)
+
 if __name__ == '__main__':
     wordcloud_visualization(clear_data)
-    frequency_distribution(clear_data, 'text_')
+    frequency_distribution(raw_data, 'text_')
     plot_histogram(clear_data)
     plot_bar_chart(clear_data, 'label')
     plot_text_length_distribution(clear_data)
+    punctuation_distribution(raw_data)
