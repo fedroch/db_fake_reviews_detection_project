@@ -12,7 +12,8 @@ from transformers import get_scheduler
 from src.data_parce import clear_data as data
 import json
 
-# data = pd.read_csv(Path(__file__).parent.parent / 'data/raw/fake reviews dataset.csv')
+# data = pd.read_csv(Path(__file__).parent.parent / 'data/raw/fake reviews dataset.csv') # маленький датасет
+# data = pd.read_csv(Path(__file__).parent.parent / 'data/raw/pseudo_labeled_amazon_reviews.csv') # жирненький датасет
 
 def load_lstm_pretrained(save_dir, device):
     save_dir = Path(save_dir)
@@ -35,7 +36,7 @@ def load_lstm_pretrained(save_dir, device):
 
 def load_glove_embeddings(word2id, glove_path, emb_dim=100):
     vocab_size = len(word2id)
-    # Инициализируем матрицу небольшим шумом (это важно для обучения)
+    # Инициализируем матрицу небольшим шумом
     embedding_matrix = np.random.normal(scale=0.1, size=(vocab_size, emb_dim))
     hits = 0
     misses = 0
@@ -207,7 +208,7 @@ def run_pipeline(X_train, y_train, X_val, y_val):
     model.to(device)
     # Обучение
     print("Рецепт иишницы на видеокарте: возьмите 1 модель LSTM, добавьте капельку слез и приправьте 25 эпохами обучения. Подавайте горячим!")
-    train_model(model, train_loader, val_loader, device, epochs=25, patience=5)
+    train_model(model, train_loader, val_loader, device, epochs=15, patience=5)
     
     return model, tokenizer
 
@@ -239,10 +240,10 @@ if __name__ == "__main__":
         device = torch.device("cpu")
         print("Увы, всё еще на процессоре...")
 
-    data['label'] = data['label'].map({'OR': 0, 'CG': 1})
+    # data['label'] = data['label'].map({'OR': 0, 'CG': 1}) # для маленького датасета
 
     X_train, X_test, y_train, y_test = train_test_split(
-        data['text_'], 
+        data['text'], 
         data['label'], 
         test_size=0.2, 
         random_state=42,
