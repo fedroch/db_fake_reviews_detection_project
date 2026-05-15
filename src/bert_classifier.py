@@ -184,35 +184,35 @@ def evaluate(model, loader):
 
     return np.array(all_labels), np.array(all_preds)
 
+if __name__ == "__main__":
+    print("\n─── Начало обучения ───")
+    for epoch in range(EPOCHS):
+        print(f"\nЭпоха {epoch + 1} / {EPOCHS}")
+        avg_loss = train_epoch(model, train_loader, optimizer, scheduler)
+        print(f"  Средний loss: {avg_loss:.4f}")
 
-print("\n─── Начало обучения ───")
-for epoch in range(EPOCHS):
-    print(f"\nЭпоха {epoch + 1} / {EPOCHS}")
-    avg_loss = train_epoch(model, train_loader, optimizer, scheduler)
-    print(f"  Средний loss: {avg_loss:.4f}")
+        labels_true, labels_pred = evaluate(model, test_loader)
+        acc = accuracy_score(labels_true, labels_pred)
+        print(f"  Accuracy на тесте: {acc:.2%}")
 
+        if DEVICE.type == 'cuda':
+            print(f"  Пик VRAM за эпоху: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB")
+            torch.cuda.reset_peak_memory_stats()
+
+
+    #  Финальный отчёт
+
+
+    print("\n─── Финальные метрики ───")
     labels_true, labels_pred = evaluate(model, test_loader)
-    acc = accuracy_score(labels_true, labels_pred)
-    print(f"  Accuracy на тесте: {acc:.2%}")
-
-    if DEVICE.type == 'cuda':
-        print(f"  Пик VRAM за эпоху: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB")
-        torch.cuda.reset_peak_memory_stats()
+    print(f"Accuracy: {accuracy_score(labels_true, labels_pred):.2%}")
+    print(classification_report(labels_true, labels_pred, target_names=['CG', 'OR']))
 
 
-#  Финальный отчёт
+    #  Сохранение
 
 
-print("\n─── Финальные метрики ───")
-labels_true, labels_pred = evaluate(model, test_loader)
-print(f"Accuracy: {accuracy_score(labels_true, labels_pred):.2%}")
-print(classification_report(labels_true, labels_pred, target_names=['CG', 'OR']))
-
-
-#  Сохранение
-
-
-save_path = MODELS_DIR / 'bert_finetuned'
-model.save_pretrained(save_path)
-tokenizer.save_pretrained(save_path)
-print(f"\nМодель сохранена в {save_path}")
+    save_path = MODELS_DIR / 'bert_finetuned'
+    model.save_pretrained(save_path)
+    tokenizer.save_pretrained(save_path)
+    print(f"\nМодель сохранена в {save_path}")
