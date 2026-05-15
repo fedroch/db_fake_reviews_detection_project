@@ -119,8 +119,7 @@ def plot_top_words_per_category(vectorizer, model, category_texts, category_name
     X_cat = vectorizer.transform(category_texts)
     mean_tfidf = np.asarray(X_cat.mean(axis=0)).flatten()
     category_importance = global_coef * mean_tfidf
-
-    # 4. Выбираем топ-n слов (отрицательные -> оригинал, положительные -> фейк)
+    # Выбираем топ-n слов (отрицательные -> оригинал, положительные -> фейк)
     top_pos_idx = np.argsort(category_importance)[-n:]
     top_neg_idx = np.argsort(category_importance)[:n]
     top_idx = np.concatenate([top_neg_idx, top_pos_idx])
@@ -131,7 +130,6 @@ def plot_top_words_per_category(vectorizer, model, category_texts, category_name
     fig, ax = plt.subplots(figsize=(10, 7))
     ax.barh(words, values, color=colors, edgecolor='white')
     ax.axvline(0, color='gray', linewidth=0.8)
-    # Обновляем заголовки, чтобы было видно категорию
     ax.set_title(f'Топ-{n} слов для категории: {category_name}')
     ax.set_xlabel(f'Вклад слова (Вес {model_name} × Частота в категории)')
     
@@ -143,9 +141,8 @@ def plot_top_words_per_category(vectorizer, model, category_texts, category_name
             
     fig.tight_layout()
     
-    # Сохраняем с именем категории
     save_dir = FIGURES_DIR / model_name
-    save_dir.mkdir(parents=True, exist_ok=True) # На всякий случай создаем папку
+    save_dir.mkdir(parents=True, exist_ok=True)
     save_path = save_dir / f'top_words_{category_name}.png'
     
     fig.savefig(save_path, dpi=150, bbox_inches='tight')
