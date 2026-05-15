@@ -73,7 +73,9 @@ def plot_text_length_distribution(data, column='text'):
     for ax, cls, color in zip(axes, data['label'].unique(), ['steelblue', 'tomato']):
         subset = data[data['label'] == cls]['text_len']
         ax.hist(subset, bins=40, color=color, edgecolor='white', alpha=0.85)
-        ax.set_title(f'Длина текста — класс «{cls}»')
+        ax.set_xlim(0, 500)
+        cls_b = {0: 'Fake (CG)', 1: 'Real (OR)'}
+        ax.set_title(f'Длина текста — класс «{cls_b[cls]}»')
         ax.set_xlabel('Количество слов')
         ax.set_ylabel('Частота')
         ax.grid(axis='y', alpha=0.4)
