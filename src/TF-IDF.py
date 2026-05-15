@@ -40,8 +40,8 @@ from sklearn.metrics import classification_report, accuracy_score
 predictions = logistic_model.predict(X_test)
 
 joblib.dump({'model': logistic_model, 'vectorizer': vectorizer},
-            MODELS_DIR / 'bag_of_words.pkl')
-print(f"Модель сохранена в {MODELS_DIR / 'bag_of_words.pkl'}")
+            MODELS_DIR / 'TF_IDF.pkl')
+print(f"Модель сохранена в {MODELS_DIR / 'TF_IDF.pkl'}")
 
 print(f"Общая точность (Accuracy): {accuracy_score(y_test, predictions):.2%}")
 print("\nПодробный отчет:")
