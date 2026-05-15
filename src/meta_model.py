@@ -22,16 +22,6 @@ import re
 MODELS_DIR = Path(__file__).parent.parent / 'models'
 model_path = MODELS_DIR / 'bert_finetuned'
 
-tokenizer = BertTokenizerFast.from_pretrained(model_path)
-model = BertForSequenceClassification.from_pretrained(model_path)
-model.to(DEVICE)
-model.eval()
-
-train_dataset = ReviewDataset(X_train_raw, y_train, tokenizer, MAX_LEN)
-test_dataset  = ReviewDataset(X_test_raw,  y_test,  tokenizer, MAX_LEN)
-
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=False)
-test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False)
 def get_bert_emb(model, dataloader):
     embeddings = []
     labels = []
@@ -50,10 +40,6 @@ def get_bert_emb(model, dataloader):
             labels.extend(batch['labels'].cpu().numpy())
     return np.vstack(embeddings), np.array(labels)
 
-# 4. Извлекаем признаки
-X_train_bert, y_train_labels = get_bert_emb(model, train_loader)
-X_test_bert, y_test_labels = get_bert_emb(model, test_loader)
-
 print("Расчет кастомных признаков...")
 def get_custom_features(texts):
     """Докидываем модели экстра признаки (в данном случае длина и кол-во пунктуации)"""
@@ -64,6 +50,20 @@ def get_custom_features(texts):
         punc_desity = punctuation_count / text_len
         features.append([text_len, punctuation_count, punc_desity])
     return np.array(features)
+
+tokenizer = BertTokenizerFast.from_pretrained(model_path)
+model = BertForSequenceClassification.from_pretrained(model_path)
+model.to(DEVICE)
+model.eval()
+
+train_dataset = ReviewDataset(X_train_raw, y_train, tokenizer, MAX_LEN)
+test_dataset  = ReviewDataset(X_test_raw,  y_test,  tokenizer, MAX_LEN)
+
+train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=False)
+test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False)
+
+X_train_bert, y_train_labels = get_bert_emb(model, train_loader)
+X_test_bert, y_test_labels = get_bert_emb(model, test_loader)
 
 X_train_custom = get_custom_features(X_train_raw)
 X_test_custom = get_custom_features(X_test_raw)
