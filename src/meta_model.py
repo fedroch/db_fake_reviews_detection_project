@@ -40,7 +40,6 @@ def get_bert_emb(model, dataloader):
             labels.extend(batch['labels'].cpu().numpy())
     return np.vstack(embeddings), np.array(labels)
 
-print("Расчет кастомных признаков...")
 def get_custom_features(texts):
     """Докидываем модели экстра признаки (в данном случае длина и кол-во пунктуации)"""
     features =[]
@@ -62,7 +61,7 @@ if __name__ == '__main__':
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=False)
     test_loader  = DataLoader(test_dataset,  batch_size=BATCH_SIZE, shuffle=False)
-
+    print("Расчет кастомных признаков...")
     X_train_bert, y_train_labels = get_bert_emb(model, train_loader)
     X_test_bert, y_test_labels = get_bert_emb(model, test_loader)
 
