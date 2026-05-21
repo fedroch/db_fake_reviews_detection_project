@@ -272,3 +272,4 @@ if __name__ == "__main__":
     print("\n─── Сохранение эмбеддинков ───")
     train_embeddings, train_labels = extract_and_save_embeddings(model, train_loader, save_path, 'train')
     test_embeddings, test_labels = extract_and_save_embeddings(model, test_loader, save_path, 'test')
+    print("\nЭмбеддинки сохранены и готовы для meta_model!")
