@@ -1,3 +1,6 @@
+from sklearn.model_selection import train_test_split
+import pandas as pd
+import numpy as np
 import torch
 import numpy as np
 import gc
@@ -83,6 +86,17 @@ if __name__ == '__main__':
         model = BertForSequenceClassification.from_pretrained(model_path)
         model.to(bert_classifier.DEVICE)
         model.eval()
+
+        raw_data = pd.read_csv(Path(__file__).parent.parent / 'data/raw/pseudo_labeled_amazon_reviews.csv')
+        raw_data = raw_data.fillna('')
+
+        #  Подготовка данных
+        X_train_raw, X_test_raw, y_train, y_test = train_test_split(
+            raw_data['text'],
+            raw_data['label'],
+            test_size=0.2,
+            random_state=42
+        )
 
         train_dataset = bert_classifier.ReviewDataset(bert_classifier.X_train_raw, bert_classifier.y_train)
         test_dataset  = bert_classifier.ReviewDataset(bert_classifier.X_test_raw,  bert_classifier.y_test)

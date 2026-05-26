@@ -1,4 +1,4 @@
-from src.data_parce import raw_data
+# from src.data_parce import raw_data
 import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import BertTokenizerFast, BertForSequenceClassification
@@ -8,6 +8,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
 from pathlib import Path
 import numpy as np
+import pandas as pd
 
 
 #  Настройки — подобраны под RTX 2060 (6GB)
@@ -31,16 +32,11 @@ if DEVICE.type == 'cuda':
 else:
     print("CUDA не найдена — обучение на CPU будет очень долгим!")
 
+tokenizer = BertTokenizerFast.from_pretrained(MODEL_NAME)
 
 #  Маппинг меток
-
-
 label2id = {'CG': 0, 'OR': 1}
 id2label = {0: 'CG', 1: 'OR'}
-
-
-#  Датасет
-raw_data = raw_data.fillna('')
 
 class ReviewDataset(Dataset):
     def __init__(self, texts, labels):
@@ -72,44 +68,11 @@ def collate_batch(batch):
         return_tensors='pt'
     )
     encodings['labels'] = labels
+    for k, v in encodings.items():
+        encodings[k] = v.to(DEVICE)
+
     return encodings
 
-
-#  Подготовка данных
-
-
-X_train_raw, X_test_raw, y_train, y_test = train_test_split(
-    raw_data['text'],
-    raw_data['label'],
-    test_size=0.2,
-    random_state=42
-)
-
-print(f"\nTrain: {len(X_train_raw)} | Test: {len(X_test_raw)}")
-
-tokenizer = BertTokenizerFast.from_pretrained(MODEL_NAME)
-
-print("Токенизация train...")
-train_dataset = ReviewDataset(X_train_raw, y_train)
-print("Токенизация test...")
-test_dataset  = ReviewDataset(X_test_raw,  y_test)
-
-train_loader = DataLoader(
-    train_dataset,
-    batch_size=BATCH_SIZE,
-    shuffle=True,
-    pin_memory=True,
-    num_workers=2,
-    collate_fn=collate_batch
-)
-test_loader = DataLoader(
-    test_dataset,
-    batch_size=BATCH_SIZE,
-    shuffle=False,
-    pin_memory=True,
-    num_workers=2,
-    collate_fn=collate_batch
-)
 
 #  Обучение
 
@@ -215,7 +178,39 @@ def extract_and_save_embeddings(model, loader, save_path, name):
     
     return embeddings, labels
 
-if __name__ == "__main__":
+if __name__ == "__main__":   
+    #  Датасет
+    raw_data = pd.read_csv(Path(__file__).parent.parent / 'data/raw/pseudo_labeled_amazon_reviews.csv')
+    raw_data = raw_data.fillna('')
+    #  Подготовка данных
+    X_train_raw, X_test_raw, y_train, y_test = train_test_split(
+        raw_data['text'],
+        raw_data['label'],
+        test_size=0.2,
+        random_state=42
+    )
+    print(f"\nTrain: {len(X_train_raw)} | Test: {len(X_test_raw)}")
+    print("Токенизация train...")
+    train_dataset = ReviewDataset(X_train_raw, y_train)
+    print("Токенизация test...")
+    test_dataset  = ReviewDataset(X_test_raw,  y_test)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        pin_memory=True,
+        num_workers=2,
+        collate_fn=collate_batch
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        pin_memory=True,
+        num_workers=2,
+        collate_fn=collate_batch
+    )
+
     #  Модель
     model = BertForSequenceClassification.from_pretrained(
         MODEL_NAME,
