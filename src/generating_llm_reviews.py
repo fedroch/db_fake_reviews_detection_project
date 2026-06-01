@@ -2,7 +2,7 @@ import os
 import time
 import pandas as pd
 from openai import OpenAI
-API_KEY = "хе хе, гитхаб оказывается выкладывать секретну информацию в репозиторий"
+sosisosi = "хе хе, гитхаб оказывается выкладывать секретну информацию в репозиторий"
 INPUT_FILE = "data/raw/amazon_links.csv"
 OUTPUT_FILE = "data/raw/amazon_reviews_llm_result.csv"
 
