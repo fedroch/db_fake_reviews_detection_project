@@ -58,25 +58,26 @@ def load_bert_embeddings(model_path):
     else:
         return None
 
-def get_custom_features(texts):
-    """Докидываем модели экстра признаки (в данном случае длина и кол-во пунктуации)"""
-    features = np.zeros((len(texts), 3), dtype=np.float32)
+def get_custom_features(df):
+    """Экстра-признаки: длина, кол-во пунктуации, доля пунктуации, рейтинг."""
     punc_set = set(punctuation)
-    
+    n = len(df)
+    features = np.zeros((n, 4), dtype=np.float32)
+    texts = df['text'].astype(str).tolist()
+    ratings = pd.to_numeric(df['rating'], errors='coerce').fillna(0).to_numpy()
     for i, text in enumerate(tqdm(texts, desc="Извлечение кастомных признаков")):
-        if not isinstance(text, str):
-            text = str(text)
         text_len = len(text)
-        punctuation_count = sum(1 for char in text if char in punc_set)
-        
+        punctuation_count = sum(1 for ch in text if ch in punc_set)
         features[i, 0] = text_len
         features[i, 1] = punctuation_count
-        features[i, 2] = 0 if not text_len else punctuation_count / text_len
+        features[i, 2] = 0.0 if not text_len else punctuation_count / text_len
+        features[i, 3] = ratings[i]
     return features
 
 if __name__ == '__main__':
     # Попытка загрузить сохранённые эмбеддинки
-    embeddings_result = load_bert_embeddings(model_path)
+    # embeddings_result = load_bert_embeddings(model_path) для переобучения не годится
+    embeddings_result = None
     if embeddings_result is not None:
         X_train_bert, y_train_labels, X_test_bert, y_test_labels = embeddings_result
     else:
@@ -92,8 +93,7 @@ if __name__ == '__main__':
 
         #  Подготовка данных
         X_train_raw, X_test_raw, y_train, y_test = train_test_split(
-            raw_data['text'],
-            raw_data['label'],
+            raw_data,
             test_size=0.2,
             random_state=42
         )
