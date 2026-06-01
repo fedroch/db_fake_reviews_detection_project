@@ -61,18 +61,17 @@ def load_bert_embeddings(model_path):
 def get_custom_features(df):
     """Экстра-признаки: длина, кол-во пунктуации, доля пунктуации, рейтинг."""
     punc_set = set(punctuation)
-    n = len(df)
-    features = np.zeros((n, 4), dtype=np.float32)
-    texts = df['text'].astype(str).tolist()
-    ratings = pd.to_numeric(df['rating'], errors='coerce').fillna(0).to_numpy()
-    for i, text in enumerate(tqdm(texts, desc="Извлечение кастомных признаков")):
-        text_len = len(text)
-        punctuation_count = sum(1 for ch in text if ch in punc_set)
-        features[i, 0] = text_len
-        features[i, 1] = punctuation_count
-        features[i, 2] = 0.0 if not text_len else punctuation_count / text_len
-        features[i, 3] = ratings[i]
-    return features
+    texts   = df["text"].astype(str).tolist()
+    ratings = pd.to_numeric(df["rating"], errors="coerce").fillna(0).to_numpy(dtype=np.float32)
+    feats = np.zeros((len(texts), 4), dtype=np.float32)
+    for i, t in enumerate(texts):
+        L = len(t)
+        p = sum(1 for ch in t if ch in punc_set)
+        feats[i, 0] = L
+        feats[i, 1] = p
+        feats[i, 2] = 0.0 if L == 0 else p / L
+        feats[i, 3] = ratings[i]
+    return feats
 
 if __name__ == '__main__':
     # Попытка загрузить сохранённые эмбеддинки
