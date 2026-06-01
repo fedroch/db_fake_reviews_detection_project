@@ -124,8 +124,8 @@ if __name__ == '__main__':
         gc.collect()
 
     print("Создание кастомных признаков")
-    X_train_custom = get_custom_features(bert_classifier.X_train_raw)
-    X_test_custom = get_custom_features(bert_classifier.X_test_raw)
+    X_train_custom = get_custom_features(X_train_raw)
+    X_test_custom = get_custom_features(X_test_raw)
 
     del bert_classifier.raw_data
     del bert_classifier.X_train_raw

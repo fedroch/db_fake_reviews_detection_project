@@ -21,7 +21,7 @@ DEVICE     = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 MODEL_NAME = 'bert-base-uncased'
 MAX_LEN    = 128   # ключевой параметр: 128 влезает в 6GB, 256 скорее всего нет
 BATCH_SIZE = 32     # для 6GB безопасный размер, попробуй 8 если будет OOM
-EPOCHS     = 3
+EPOCHS     = 5
 LR         = 2e-5
 
 print(f"Устройство: {DEVICE}")
@@ -180,12 +180,31 @@ def extract_and_save_embeddings(model, loader, save_path, name):
 
 if __name__ == "__main__":   
     #  Датасет
-    raw_data = pd.read_csv(Path(__file__).parent.parent / 'data/raw/pseudo_labeled_amazon_reviews.csv')
-    raw_data = raw_data.fillna('')
+    usecols = ["category", "rating", "label", "text"]
+    fakes, origs = [], []
+    for chunk in pd.read_csv(PSEUDO_PATH, usecols=usecols, chunksize=500_000):
+        fakes.append(chunk[chunk["label"] == 0])
+        o = chunk[chunk["label"] == 1]
+        origs.append(o.sample(min(len(o), 10_000), random_state=42))
+
+    fake_df = pd.concat(fakes).sample(N_FAKE, random_state=42)
+    orig_df = pd.concat(origs).sample(N_ORIG, random_state=42)
+    del fakes, origs
+    gc.collect()
+    print(f"pseudo -> фейк: {len(fake_df)}, оригинал: {len(orig_df)}")
+    llm = pd.read_csv(LLM_PATH)
+    llm["label"] = 0
+    llm = llm[["category", "rating", "label", "text"]]
+    raw_data = pd.concat([orig_df, fake_df, llm], ignore_index=True)
+    raw_data["text"]   = raw_data["text"].fillna("").astype(str)
+    raw_data["rating"] = pd.to_numeric(raw_data["rating"], errors="coerce")
+    raw_data = raw_data.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    del fake_df, orig_df, llm
+    gc.collect()
     #  Подготовка данных
     X_train_raw, X_test_raw, y_train, y_test = train_test_split(
-        raw_data['text'],
-        raw_data['label'],
+        raw_data,
         test_size=0.2,
         random_state=42
     )
@@ -257,7 +276,7 @@ if __name__ == "__main__":
 
     #  Сохранение
 
-    save_path = MODELS_DIR / 'bert_finetuned'
+    save_path = MODELS_DIR / 'bert_finetuned' / 'v2'
     model.save_pretrained(save_path)
     tokenizer.save_pretrained(save_path)
     print(f"\nМодель сохранена в {save_path}")
