@@ -2,7 +2,7 @@ import os
 import time
 import pandas as pd
 from openai import OpenAI
-API_KEY = "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"
+API_KEY = "хе хе, гитхаб оказывается выкладывать секретну информацию в репозиторий"
 INPUT_FILE = "data/raw/amazon_links.csv"
 OUTPUT_FILE = "data/raw/amazon_reviews_llm_result.csv"
 
