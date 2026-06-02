@@ -3,7 +3,7 @@ import re
 import time
 import pandas as pd
 from openai import OpenAI
-API_KEY = "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"
+API_KEY = "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"
 INPUT_FILE = "data/raw/amazon_links.csv"
 OUTPUT_FILE = "data/raw/amazon_reviews_llm_annotated.csv"
 
@@ -30,12 +30,12 @@ SYSTEM_INSTRUCTION = (
 
 
 def generate_reviews(link):
-    """Функция делает запрос к Openrute"""
+    """Функция делает запрос к api"""
     prompt = f"""
     Analyze this product by link: {link}
     Write exactly 15 positive and 15 negative reviews in English.
 
-    Each review on a new line. Use STRICTLY this format (no extra text, no bold):
+    Each review on a new line. Use STRICTLY this format (no extra text, no bold, no quotes):
     [POSITIVE:5] Review text...
     [NEGATIVE:1] Review text...
 
@@ -44,7 +44,7 @@ def generate_reviews(link):
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="Phi-4-mini-instruct",
             messages=[
                 {"role": "system", "content": SYSTEM_INSTRUCTION},
                 {"role": "user", "content": prompt},
@@ -53,7 +53,7 @@ def generate_reviews(link):
         )
         return response.choices[0].message.content
     except Exception as e:
-        print(f"Ошибка при запросе к DeepSeek для ссылки {link}: {e}")
+        print(f"Ошибка при запросе к api для ссылки {link}: {e}")
         return None
 
 
@@ -100,7 +100,7 @@ def main():
     if os.path.exists(OUTPUT_FILE):
         df_existing = pd.read_csv(OUTPUT_FILE)
         if "link" in df_existing.columns:
-            processed_links = set(df_existing["link"].unique())
+            processed_links = set(df_existing[df_existing["link"].isin(df_links["link"])]["link"].unique())
 
     total_links = len(df_links)
     print(f"Найдено ссылок: {total_links}. Уже обработано: {len(processed_links)}")

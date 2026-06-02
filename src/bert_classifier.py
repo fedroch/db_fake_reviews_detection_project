@@ -194,6 +194,7 @@ if __name__ == "__main__":
     print(f"pseudo -> фейк: {len(fake_df)}, оригинал: {len(orig_df)}")
     llm = pd.read_csv(LLM_PATH)
     llm["label"] = 0
+    llm = llm.rename(columns={"review": "text"})
     llm = llm[["category", "rating", "label", "text"]]
     raw_data = pd.concat([orig_df, fake_df, llm], ignore_index=True)
     raw_data["text"]   = raw_data["text"].fillna("").astype(str)
@@ -203,16 +204,18 @@ if __name__ == "__main__":
     del fake_df, orig_df, llm
     gc.collect()
     #  Подготовка данных
-    X_train_raw, X_test_raw, y_train, y_test = train_test_split(
+    X_train_raw, X_test_raw = train_test_split(
         raw_data,
         test_size=0.2,
         random_state=42
     )
+    y_train = X_train_raw["label"].values
+    y_test  = X_test_raw["label"].values
     print(f"\nTrain: {len(X_train_raw)} | Test: {len(X_test_raw)}")
     print("Токенизация train...")
-    train_dataset = ReviewDataset(X_train_raw, y_train)
+    train_dataset = ReviewDataset(X_train_raw["text"], y_train)
     print("Токенизация test...")
-    test_dataset  = ReviewDataset(X_test_raw,  y_test)
+    test_dataset  = ReviewDataset(X_test_raw["text"],  y_test)
     train_loader = DataLoader(
         train_dataset,
         batch_size=BATCH_SIZE,
