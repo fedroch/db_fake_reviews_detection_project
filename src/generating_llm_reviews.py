@@ -3,7 +3,7 @@ import re
 import time
 import pandas as pd
 from openai import OpenAI
-API_KEY = "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"
+API_KEY = "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"
 INPUT_FILE = "data/raw/amazon_links.csv"
 OUTPUT_FILE = "data/raw/amazon_reviews_llm_annotated.csv"
 
@@ -25,7 +25,7 @@ client = OpenAI(api_key=API_KEY, base_url = "https://models.github.ai/inference"
 SYSTEM_INSTRUCTION = (
     "Ты — эксперт по маркетингу и анализу маркетплейсов. Твоя задача — генерировать реалистичные "
     "отзывы на товары по предоставленным ссылкам на Amazon. Отзывы должны быть на английском языке, "
-    "разнообразными по длине, стилю и деталям (как от обычных покупателей)."
+    "разнообразными по длине, стилю и деталям (как от обычных покупателей) Отзывы выглядеть так, будто их писал человек."
 )
 
 
@@ -42,19 +42,28 @@ def generate_reviews(link):
     Positive reviews get rating 4-5, negative reviews get rating 1-3.
     """
 
-    try:
-        response = client.chat.completions.create(
-            model="Phi-4-mini-instruct",
-            messages=[
-                {"role": "system", "content": SYSTEM_INSTRUCTION},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.7,
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        print(f"Ошибка при запросе к api для ссылки {link}: {e}")
-        return None
+    for attempt in range(5):
+        try:
+            response = client.chat.completions.create(
+                model="Phi-4-mini-instruct",
+                messages=[
+                    {"role": "system", "content": SYSTEM_INSTRUCTION},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.7,
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            msg = str(e)
+            if "Too many requests" in msg or "429" in msg:
+                wait = 60 * (2 ** attempt)
+                print(f"Rate limit, жду {wait}s (попытка {attempt + 1}/5)...")
+                time.sleep(wait)
+            else:
+                print(f"Ошибка при запросе к api для ссылки {link}: {e}")
+                return None
+    print(f"Все попытки исчерпаны для {link}")
+    return None
 
 
 def parse_and_save_reviews(link, category, raw_text, output_file):
@@ -107,7 +116,7 @@ def main():
 
     for index, row in df_links.iterrows():
         link = row["link"]
-        if link in processed_links:
+        if (link in processed_links) or (index < 251): # убрать потом
             continue
 
         print(f"[{index + 1}/{total_links}] Запрос к api для: {link}")
