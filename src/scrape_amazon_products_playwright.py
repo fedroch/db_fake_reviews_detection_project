@@ -60,7 +60,7 @@ async def navigate_with_retry(page, url, max_retries=3):
     for attempt in range(max_retries):
         try:
             logger.info(f"  Попытка {attempt + 1}: Переход на {url}")
-            response = await page.goto(url, wait_until='networkidle', timeout=60000)
+            response = await page.goto(url, wait_until='domcontentloaded', timeout=60000)
             
             if response and response.status == 200:
                 if await is_captcha(page):
@@ -79,7 +79,7 @@ async def navigate_with_retry(page, url, max_retries=3):
         await asyncio.sleep(random.uniform(2, 5))
     return None
 
-async def scrape_amazon_products(num_products_per_category=50):
+async def scrape_amazon_products(num_products_per_category=1000):
     """
     Скрейпит популярные товары с Amazon для каждой категории.
     """
@@ -88,7 +88,7 @@ async def scrape_amazon_products(num_products_per_category=50):
     
     async with async_playwright() as p:
         browser = await p.chromium.launch(
-            headless=False,
+            headless=True,
             args=[
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -99,7 +99,7 @@ async def scrape_amazon_products(num_products_per_category=50):
         context = await browser.new_context(
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
             locale='en-US',
-            viewport={'width': 1920, 'height': 1080},
+            viewport={'width': 1280, 'height': 720},
         )
         
         await context.add_init_script(
@@ -146,38 +146,27 @@ async def scrape_amazon_products(num_products_per_category=50):
                 for product in product_elements:
                     if products_collected >= num_products_per_category:
                         break
-                        
+
                     try:
                         asin = await product.get_attribute('data-asin')
-                        if not asin: continue
+                        if not asin:
+                            continue
 
-                        link_elem = await product.query_selector("h2 a")
-                        if not link_elem:
-                            continue
-                            
-                        link = await link_elem.get_attribute('href')
-                        if not link:
-                            continue
-                            
-                        if link.startswith('/'): 
-                            link = f"https://www.amazon.com{link}"
-                        
-                        # Очищаем ссылку от лишних параметров для чистоты
-                        if '?' in link:
-                            link = link.split('?')[0]
-                        
-                        # Для логов все же вытянем название, чтобы видеть прогресс
+                        # Строим ссылку из ASIN — надёжнее чем парсить href
+                        link = f"https://www.amazon.com/dp/{asin}"
+
                         title_elem = await product.query_selector("h2 a span, h2 span")
                         title = (await title_elem.text_content() or 'Unknown').strip() if title_elem else 'Unknown'
-                        
+
                         all_products.append({
                             'asin': asin,
-                            'link': link
+                            'link': link,
+                            'category': category_name
                         })
-                        
+
                         products_collected += 1
                         logger.info(f"    {products_collected}. [{asin}] {title[:50]}...")
-                        
+
                     except Exception as e:
                         logger.debug(f"    ✗ Ошибка парсинга товара: {e}")
                         continue
@@ -203,7 +192,7 @@ async def main():
         df = df.drop_duplicates(subset=['asin'])
         
         # Оставляем только колонку с ссылками
-        links_df = df[['link']]
+        links_df = df[['category', 'link']]
         
         save_path = Path(__file__).parent.parent / 'data/raw/amazon_links.csv'
         save_path.parent.mkdir(parents=True, exist_ok=True)

@@ -254,11 +254,11 @@ if __name__ == "__main__":
         num_training_steps=num_training_steps
     )
     print("\n─── Начало обучения ───")
+    avg_loss = []
     for epoch in range(EPOCHS):
         print(f"\nЭпоха {epoch + 1} / {EPOCHS}")
-        avg_loss = train_epoch(model, train_loader, optimizer, scheduler)
-        print(f"  Средний loss: {avg_loss:.4f}")
-
+        avg_loss.append(train_epoch(model, train_loader, optimizer, scheduler))
+        print(f"  Средний loss: {avg_loss[-1]:.4f}")    
         labels_true, labels_pred = evaluate(model, test_loader)
         acc = accuracy_score(labels_true, labels_pred)
         print(f"  Accuracy на тесте: {acc:.2%}")
@@ -266,6 +266,10 @@ if __name__ == "__main__":
         if DEVICE.type == 'cuda':
             print(f"  Пик VRAM за эпоху: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB")
             torch.cuda.reset_peak_memory_stats()
+        if (epoch >2):
+            if ((avg_loss[-1] >= avg_loss[-2]) and (avg_loss[-2] >= avg_loss[-3])):
+                print("early stop (3 эпохи лосс не падает)")
+                break
 
     #  Финальный отчёт
 
