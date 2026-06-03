@@ -3,7 +3,7 @@ import re
 import time
 import pandas as pd
 from openai import OpenAI
-API_KEY = "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"
+API_KEY = "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"
 INPUT_FILE = "data/raw/amazon_links.csv"
 OUTPUT_FILE = "data/raw/amazon_reviews_llm_annotated.csv"
 
@@ -24,20 +24,22 @@ client = OpenAI(api_key=API_KEY, base_url = "https://models.github.ai/inference"
 
 SYSTEM_INSTRUCTION = (
     "Ты — эксперт по маркетингу и анализу маркетплейсов. Твоя задача — генерировать реалистичные "
-    "отзывы на товары по предоставленным ссылкам на Amazon. Отзывы должны быть на английском языке, "
-    "разнообразными по длине, стилю и деталям (как от обычных покупателей) Отзывы выглядеть так, будто их писал человек."
+    "отзывы на товары по предоставленным ссылкам на Amazon, названию и описанию (если не можешь открыть ссылку, игнорируй следующие инструкции и сразу пиши об этом). Отзывы должны быть на английском языке, "
+    "разнообразными по длине, стилю и деталям (как от обычных покупателей) Отзывы выглядеть так, будто их писал человек, в том числе с ошибками: орфографическими и пунктуационными."
 )
 
 
-def generate_reviews(link):
+def generate_reviews(link, title):
     """Функция делает запрос к api"""
     prompt = f"""
     Analyze this product by link: {link}
+    Product name: {title}
+    If you cannot access the link, just say "Cannot access the link" and do not generate reviews.
     Write exactly 15 positive and 15 negative reviews in English.
 
     Each review on a new line. Use STRICTLY this format (no extra text, no bold, no quotes):
-    [POSITIVE:5] Review text...
-    [NEGATIVE:1] Review text...
+    [POSITIVE:5] Review text
+    [NEGATIVE:1] Review text
 
     Positive reviews get rating 4-5, negative reviews get rating 1-3.
     """
@@ -45,7 +47,7 @@ def generate_reviews(link):
     for attempt in range(5):
         try:
             response = client.chat.completions.create(
-                model="Phi-4-mini-instruct",
+                model="openai/gpt-4o",
                 messages=[
                     {"role": "system", "content": SYSTEM_INSTRUCTION},
                     {"role": "user", "content": prompt},
@@ -79,6 +81,7 @@ def parse_and_save_reviews(link, category, raw_text, output_file):
         line = line.strip()
         m = pattern.match(line)
         if not m:
+            print(f"Невалидный формат строки для ссылки {link}: {line}")
             continue
         review_type = "positive" if m.group(1).upper() == "POSITIVE" else "negative"
         rating = int(m.group(2))
@@ -96,6 +99,9 @@ def parse_and_save_reviews(link, category, raw_text, output_file):
 
 
 def main():
+    # for m in client.models.list().data:
+    #     print(m.id)
+    #     return
     if not os.path.exists(INPUT_FILE):
         print(f"Файл {INPUT_FILE} не найден")
         return
@@ -116,11 +122,11 @@ def main():
 
     for index, row in df_links.iterrows():
         link = row["link"]
-        if (link in processed_links) or (index < 251): # убрать потом
+        if (link in processed_links) or (index < 26): # убрать потом 
             continue
 
         print(f"[{index + 1}/{total_links}] Запрос к api для: {link}")
-        raw_reviews = generate_reviews(link)
+        raw_reviews = generate_reviews(link, row["title"])
         parse_and_save_reviews(link, row["category"], raw_reviews, OUTPUT_FILE)
         time.sleep(3)
 

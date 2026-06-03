@@ -44,6 +44,11 @@ CATEGORY_URLS = {
     'Video_Games': 'video-games'
 }
 
+# У Amazon нет сортировки "по непопулярности", поэтому берём хвост выдачи по популярности
+SORT = 'popularity-rank'
+MAX_PAGES = 7            # Amazon обычно отдаёт не больше ~7 страниц на один запрос
+LEAST_POPULAR = True     # True — хвост выдачи (наименее популярные), False — топ
+
 async def is_captcha(page):
     """Проверяет, появилась ли капча."""
     content = await page.content()
@@ -79,9 +84,51 @@ async def navigate_with_retry(page, url, max_retries=3):
         await asyncio.sleep(random.uniform(2, 5))
     return None
 
+async def parse_products_on_page(page, category_name):
+    """Собирает товары (asin, link, title) с текущей страницы выдачи."""
+    # Небольшой скролл вниз для подгрузки контента
+    await page.evaluate("window.scrollBy(0, 500)")
+    await asyncio.sleep(random.uniform(1, 2))
+
+    try:
+        await page.wait_for_selector("div.s-result-item", timeout=15000)
+    except Exception:
+        logger.warning("  ⚠ Элементы поиска не найдены вовремя")
+
+    elements = await page.query_selector_all("div.s-result-item[data-asin]")
+    if not elements:
+        # Пробуем более общий селектор если с ASIN не нашлось
+        elements = await page.query_selector_all("div[data-component-type='s-search-result']")
+
+    items = []
+    for product in elements:
+        try:
+            asin = await product.get_attribute('data-asin')
+            if not asin:
+                continue
+
+            # Строим ссылку из ASIN — надёжнее чем парсить href
+            link = f"https://www.amazon.com/dp/{asin}"
+
+            title_elem = await product.query_selector("h2 a span, h2 span")
+            title = (await title_elem.text_content() or 'Unknown').strip() if title_elem else 'Unknown'
+
+            items.append({
+                'asin': asin,
+                'link': link,
+                'category': category_name,
+                'title': title
+            })
+        except Exception as e:
+            logger.debug(f"    ✗ Ошибка парсинга товара: {e}")
+            continue
+    return items
+
+
 async def scrape_amazon_products(num_products_per_category=1000):
     """
-    Скрейпит популярные товары с Amazon для каждой категории.
+    Скрейпит наименее популярные товары с Amazon для каждой категории
+    (хвост выдачи по популярности — см. LEAST_POPULAR).
     """
     
     all_products = []
@@ -110,7 +157,7 @@ async def scrape_amazon_products(num_products_per_category=1000):
         
         page = await context.new_page()
         page.set_default_timeout(30000)
-        
+
         try:
             # Перемешиваем категории, чтобы не идти по списку всегда одинаково
             categories = list(CATEGORY_URLS.items())
@@ -118,60 +165,51 @@ async def scrape_amazon_products(num_products_per_category=1000):
             
             for category_name, category_url in categories:
                 logger.info(f"\n📦 Обработка категории: {category_name}")
-                
-                url = f"https://www.amazon.com/s?k={category_url}&ref=nb_sb_noss&sort=popularity-rank"
-                response = await navigate_with_retry(page, url)
-                
-                if not response:
-                    logger.error(f"  ❌ Не удалось загрузить категорию {category_name} после всех попыток")
-                    continue
-                
-                # Небольшой скролл вниз для подгрузки контента
-                await page.evaluate("window.scrollBy(0, 500)")
-                await asyncio.sleep(random.uniform(1, 2))
-                
-                try:
-                    await page.wait_for_selector("div.s-result-item", timeout=15000)
-                except Exception:
-                    logger.warning("  ⚠ Элементы поиска не найдены вовремя")
-                
-                product_elements = await page.query_selector_all("div.s-result-item[data-asin]")
-                if not product_elements:
-                    # Пробуем более общий селектор если с ASIN не нашлось
-                    product_elements = await page.query_selector_all("div[data-component-type='s-search-result']")
-                
-                logger.info(f"  ✓ Найдено {len(product_elements)} потенциальных товаров")
-                
-                products_collected = 0
-                for product in product_elements:
-                    if products_collected >= num_products_per_category:
+
+                # Идём по всем доступным страницам выдачи, чтобы добраться до хвоста
+                category_items = []
+                seen_asins = set()
+                for page_num in range(1, MAX_PAGES + 1):
+                    url = f"https://www.amazon.com/s?k={category_url}&s={SORT}&page={page_num}"
+                    response = await navigate_with_retry(page, url)
+                    if not response:
+                        logger.warning(f"  ⚠ Страница {page_num} не загрузилась, останавливаемся")
                         break
 
-                    try:
-                        asin = await product.get_attribute('data-asin')
-                        if not asin:
-                            continue
+                    page_items = await parse_products_on_page(page, category_name)
+                    # Amazon иногда повторяет товары между страницами — оставляем только новые
+                    new_items = [it for it in page_items if it['asin'] not in seen_asins]
+                    seen_asins.update(it['asin'] for it in new_items)
+                    category_items.extend(new_items)
+                    logger.info(f"  стр.{page_num}: +{len(new_items)} (всего {len(category_items)})")
 
-                        # Строим ссылку из ASIN — надёжнее чем парсить href
-                        link = f"https://www.amazon.com/dp/{asin}"
+                    if not new_items:
+                        # Новых товаров нет — дальше идти смысла нет
+                        break
+                    await asyncio.sleep(random.uniform(2, 4))
 
-                        title_elem = await product.query_selector("h2 a span, h2 span")
-                        title = (await title_elem.text_content() or 'Unknown').strip() if title_elem else 'Unknown'
+                if not category_items:
+                    logger.error(f"  ❌ Ничего не собрано для {category_name}")
+                    continue
 
-                        all_products.append({
-                            'asin': asin,
-                            'link': link,
-                            'category': category_name
-                        })
+                # Наименее популярные = хвост выдачи по популярности
+                if LEAST_POPULAR:
+                    selected = category_items[-num_products_per_category:]
+                else:
+                    selected = category_items[:num_products_per_category]
+                all_products.extend(selected)
 
-                        products_collected += 1
-                        logger.info(f"    {products_collected}. [{asin}] {title[:50]}...")
+                mode = 'наименее' if LEAST_POPULAR else 'наиболее'
+                logger.info(f"  ✅ Отобрано {len(selected)} ({mode} популярных) из {len(category_items)}")
 
-                    except Exception as e:
-                        logger.debug(f"    ✗ Ошибка парсинга товара: {e}")
-                        continue
-                
-                logger.info(f"  ✅ Собрано: {products_collected}")
+                # Инкрементальное сохранение после каждой категории
+                df = pd.DataFrame(all_products).drop_duplicates(subset=['asin'])
+                products_df = df[['category', 'link', 'title']]
+                save_path = Path(__file__).parent.parent / 'data/raw/amazon_links.csv'
+                save_path.parent.mkdir(parents=True, exist_ok=True)
+                products_df.to_csv(save_path, index=False, encoding='utf-8')
+                logger.info(f"  💾 Сохранено всего {len(products_df)} → {save_path}")
+
                 # Пауза между категориями
                 await asyncio.sleep(random.uniform(3, 7))
                 
@@ -184,21 +222,21 @@ async def scrape_amazon_products(num_products_per_category=1000):
 async def main():
     logger.info("🚀 Начинаем сбор ссылок с Amazon...")
     
-    products = await scrape_amazon_products(num_products_per_category=50)
+    products = await scrape_amazon_products(num_products_per_category=5)
     
     if products:
         df = pd.DataFrame(products)
         # Убираем дубликаты по ASIN (самый надежный способ)
         df = df.drop_duplicates(subset=['asin'])
         
-        # Оставляем только колонку с ссылками
-        links_df = df[['category', 'link']]
-        
+        # Сохраняем название вместе со ссылкой и категорией
+        products_df = df[['category', 'link', 'title']]
+
         save_path = Path(__file__).parent.parent / 'data/raw/amazon_links.csv'
         save_path.parent.mkdir(parents=True, exist_ok=True)
-        links_df.to_csv(save_path, index=False, encoding='utf-8')
-        
-        logger.info(f"\n✓ Итого собрано {len(links_df)} уникальных ссылок")
+        products_df.to_csv(save_path, index=False, encoding='utf-8')
+
+        logger.info(f"\n✓ Итого собрано {len(products_df)} уникальных товаров")
         logger.info(f"✓ Сохранено в: {save_path}")
     else:
         logger.error("❌ Не удалось собрать ссылки")

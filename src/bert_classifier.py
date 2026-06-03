@@ -9,7 +9,7 @@ from sklearn.metrics import classification_report, accuracy_score
 from pathlib import Path
 import numpy as np
 import pandas as pd
-
+import gc
 
 #  Настройки — подобраны под RTX 2060 (6GB)
 
@@ -21,8 +21,12 @@ DEVICE     = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 MODEL_NAME = 'bert-base-uncased'
 MAX_LEN    = 128   # ключевой параметр: 128 влезает в 6GB, 256 скорее всего нет
 BATCH_SIZE = 32     # для 6GB безопасный размер, попробуй 8 если будет OOM
-EPOCHS     = 5
+EPOCHS     = 4
 LR         = 2e-5
+PSEUDO_PATH = "data/raw/pseudo_labeled_amazon_reviews.csv"
+LLM_PATH    = "data/raw/amazon_reviews_llm_annotated.csv"
+N_ORIG = 50_000
+N_FAKE = 50_000
 
 print(f"Устройство: {DEVICE}")
 if DEVICE.type == 'cuda':
@@ -68,8 +72,9 @@ def collate_batch(batch):
         return_tensors='pt'
     )
     encodings['labels'] = labels
-    for k, v in encodings.items():
-        encodings[k] = v.to(DEVICE)
+    # НЕ переносим на GPU здесь: collate выполняется в воркерах DataLoader (форк),
+    # а CUDA нельзя инициализировать в форкнутом процессе. На устройство батч
+    # перекидывается уже в train_epoch/evaluate (основной процесс).
 
     return encodings
 
@@ -178,8 +183,8 @@ def extract_and_save_embeddings(model, loader, save_path, name):
     
     return embeddings, labels
 
-if __name__ == "__main__":   
-    #  Датасет
+
+def build_train_test():
     usecols = ["category", "rating", "label", "text"]
     fakes, origs = [], []
     for chunk in pd.read_csv(PSEUDO_PATH, usecols=usecols, chunksize=500_000):
@@ -191,26 +196,27 @@ if __name__ == "__main__":
     orig_df = pd.concat(origs).sample(N_ORIG, random_state=42)
     del fakes, origs
     gc.collect()
-    print(f"pseudo -> фейк: {len(fake_df)}, оригинал: {len(orig_df)}")
+
     llm = pd.read_csv(LLM_PATH)
     llm["label"] = 0
     llm = llm.rename(columns={"review": "text"})
     llm = llm[["category", "rating", "label", "text"]]
+
     raw_data = pd.concat([orig_df, fake_df, llm], ignore_index=True)
     raw_data["text"]   = raw_data["text"].fillna("").astype(str)
     raw_data["rating"] = pd.to_numeric(raw_data["rating"], errors="coerce")
     raw_data = raw_data.sample(frac=1, random_state=42).reset_index(drop=True)
-
     del fake_df, orig_df, llm
     gc.collect()
-    #  Подготовка данных
-    X_train_raw, X_test_raw = train_test_split(
-        raw_data,
-        test_size=0.2,
-        random_state=42
-    )
-    y_train = X_train_raw["label"].values
-    y_test  = X_test_raw["label"].values
+
+    train_df, test_df = train_test_split(raw_data, test_size=0.2, random_state=42)
+    train_df = train_df.reset_index(drop=True)
+    test_df = test_df.reset_index(drop=True)
+    return train_df, test_df, train_df["label"].values, test_df["label"].values
+
+
+if __name__ == "__main__":
+    X_train_raw, X_test_raw, y_train, y_test = build_train_test()
     print(f"\nTrain: {len(X_train_raw)} | Test: {len(X_test_raw)}")
     print("Токенизация train...")
     train_dataset = ReviewDataset(X_train_raw["text"], y_train)
@@ -291,6 +297,14 @@ if __name__ == "__main__":
     #  Сохранение эмбеддинков
 
     print("\n─── Сохранение эмбеддинков ───")
-    train_embeddings, train_labels = extract_and_save_embeddings(model, train_loader, save_path, 'train')
+    train_eval_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        pin_memory=True,
+        num_workers=2,
+        collate_fn=collate_batch
+    )
+    train_embeddings, train_labels = extract_and_save_embeddings(model, train_eval_loader, save_path, 'train')
     test_embeddings, test_labels = extract_and_save_embeddings(model, test_loader, save_path, 'test')
-    print("\nЭмбеддинки сохранены и готовы для meta_model!")
+    print("\nЭмбеддинки сохранены")

@@ -7,7 +7,8 @@ from pathlib import Path
 import joblib
 from torch.utils.data import DataLoader
 
-def predict_meta(texts, bert_model, logistic_model, scaler):
+def predict_meta(data, bert_model, logistic_model, scaler, text_col="review"):
+    texts = data[text_col].astype(str).tolist()
     bert_model.eval()
     with torch.no_grad():
         # Лейблы не роляют если что
@@ -21,7 +22,7 @@ def predict_meta(texts, bert_model, logistic_model, scaler):
             collate_fn=bert_classifier.collate_batch
         )
         bert_embeddings, _ = meta_model.get_bert_emb(bert_model, inference_loader)
-        custom_features = meta_model.get_custom_features(texts)
+        custom_features = meta_model.get_custom_features(data, row_name=text_col)
         X_meta = np.hstack((bert_embeddings, custom_features))
         X_meta_scaled = scaler.transform(X_meta)
         predictions = logistic_model.predict(X_meta_scaled)
@@ -60,7 +61,7 @@ if __name__ == "__main__":
     imported_model = joblib.load(bert_classifier.MODELS_DIR / 'meta_model.pkl')
     logistic_model = imported_model['meta_model']
     scaler = imported_model['scaler']
-    predictions = predict_meta(data['review'].tolist(), bert_model, logistic_model, scaler)
+    predictions = predict_meta(data, bert_model, logistic_model, scaler)
     print(predictions)
     print("\n---\n")
     bert_predictions = predict_bert(data['review'].tolist(), bert_model)

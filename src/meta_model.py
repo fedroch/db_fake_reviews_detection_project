@@ -1,4 +1,3 @@
-from sklearn.model_selection import train_test_split
 import pandas as pd
 import numpy as np
 import torch
@@ -17,7 +16,7 @@ from string import punctuation
 import re
 
 MODELS_DIR = Path(__file__).parent.parent / 'models'
-model_path = MODELS_DIR / 'bert_finetuned'
+model_path = MODELS_DIR / 'bert_finetuned/v2'
 
 def get_bert_emb(model, dataloader):
     embeddings = []
@@ -40,10 +39,10 @@ def get_bert_emb(model, dataloader):
 
 def load_bert_embeddings(model_path):
     """Загружает сохранённые эмбеддинки из модели с использованием mmap для экономии RAM"""
-    train_emb_path = model_path / 'bert_embeddings' /'train_embeddings.npy'
-    train_labels_path = model_path / 'bert_embeddings' / 'train_labels.npy'
-    test_emb_path = model_path / 'bert_embeddings' / 'test_embeddings.npy'
-    test_labels_path = model_path / 'bert_embeddings' / 'test_labels.npy'
+    train_emb_path = model_path / 'train_embeddings.npy'
+    train_labels_path = model_path / 'train_labels.npy'
+    test_emb_path = model_path / 'test_embeddings.npy'
+    test_labels_path = model_path / 'test_labels.npy'
     
     if train_emb_path.exists() and test_emb_path.exists():
         print("Загрузка сохранённых эмбеддингов")
@@ -58,11 +57,14 @@ def load_bert_embeddings(model_path):
     else:
         return None
 
-def get_custom_features(df):
+def get_custom_features(df, row_name="text"):
     """Экстра-признаки: длина, кол-во пунктуации, доля пунктуации, рейтинг."""
     punc_set = set(punctuation)
-    texts   = df["text"].astype(str).tolist()
-    ratings = pd.to_numeric(df["rating"], errors="coerce").fillna(0).to_numpy(dtype=np.float32)
+    texts   = df[row_name].astype(str).tolist()
+    if "rating" in df.columns:
+        ratings = pd.to_numeric(df["rating"], errors="coerce").fillna(0).to_numpy(dtype=np.float32)
+    else:
+        ratings = np.zeros(len(texts), dtype=np.float32)
     feats = np.zeros((len(texts), 4), dtype=np.float32)
     for i, t in enumerate(texts):
         L = len(t)
@@ -74,62 +76,45 @@ def get_custom_features(df):
     return feats
 
 if __name__ == '__main__':
-    # Попытка загрузить сохранённые эмбеддинки
-    # embeddings_result = load_bert_embeddings(model_path) для переобучения не годится
-    embeddings_result = None
-    if embeddings_result is not None:
-        X_train_bert, y_train_labels, X_test_bert, y_test_labels = embeddings_result
-    else:
-        # Если нет, пересчитываем через BERT
-        print("Сохранённые эмбеддинки не найдены, пересчитываем...")
-        tokenizer = BertTokenizerFast.from_pretrained(model_path)
-        model = BertForSequenceClassification.from_pretrained(model_path)
-        model.to(bert_classifier.DEVICE)
-        model.eval()
+    tokenizer = BertTokenizerFast.from_pretrained(model_path)
+    model = BertForSequenceClassification.from_pretrained(model_path)
+    model.to(bert_classifier.DEVICE)
+    model.eval()
 
-        raw_data = pd.read_csv(Path(__file__).parent.parent / 'data/raw/pseudo_labeled_amazon_reviews.csv')
-        raw_data = raw_data.fillna('')
+    X_train_raw, X_test_raw, y_train, y_test = bert_classifier.build_train_test()
 
-        #  Подготовка данных
-        X_train_raw, X_test_raw, y_train, y_test = train_test_split(
-            raw_data,
-            test_size=0.2,
-            random_state=42
-        )
+    train_dataset = bert_classifier.ReviewDataset(X_train_raw["text"], y_train)
+    test_dataset  = bert_classifier.ReviewDataset(X_test_raw["text"],  y_test)
 
-        train_dataset = bert_classifier.ReviewDataset(bert_classifier.X_train_raw, bert_classifier.y_train)
-        test_dataset  = bert_classifier.ReviewDataset(bert_classifier.X_test_raw,  bert_classifier.y_test)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=bert_classifier.BATCH_SIZE,
+        shuffle=False,
+        pin_memory=True,
+        num_workers=2,
+        collate_fn=bert_classifier.collate_batch
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=bert_classifier.BATCH_SIZE,
+        shuffle=False,
+        pin_memory=True,
+        num_workers=2,
+        collate_fn=bert_classifier.collate_batch
+    )
 
-        train_loader = DataLoader(
-            train_dataset,
-            batch_size=bert_classifier.BATCH_SIZE,
-            shuffle=False,
-            pin_memory=True,
-            num_workers=2,
-            collate_fn=bert_classifier.collate_batch
-        )
-        test_loader = DataLoader(
-            test_dataset,
-            batch_size=bert_classifier.BATCH_SIZE,
-            shuffle=False,
-            pin_memory=True,
-            num_workers=2,
-            collate_fn=bert_classifier.collate_batch
-        )
-        
-        X_train_bert, y_train_labels = get_bert_emb(model, train_loader)
-        X_test_bert, y_test_labels = get_bert_emb(model, test_loader)
-        del model
-        torch.cuda.empty_cache()
-        gc.collect()
+    X_train_bert, y_train_labels = get_bert_emb(model, train_loader)
+    X_test_bert, y_test_labels = get_bert_emb(model, test_loader)
+    del model
+    torch.cuda.empty_cache()
+    gc.collect()
 
     print("Создание кастомных признаков")
     X_train_custom = get_custom_features(X_train_raw)
     X_test_custom = get_custom_features(X_test_raw)
 
-    del bert_classifier.raw_data
-    del bert_classifier.X_train_raw
-    del bert_classifier.X_test_raw
+    assert (y_train_labels == X_train_raw["label"].to_numpy()).all()
+    assert (y_test_labels == X_test_raw["label"].to_numpy()).all()
     gc.collect()
 
     print("Объединение признаков")
