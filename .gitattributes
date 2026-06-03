@@ -5,5 +5,8 @@ models/bert_finetuned/model.safetensors filter=lfs diff=lfs merge=lfs -text
 data/raw/llm_reviews.csv filter=lfs diff=lfs merge=lfs -text
 models/bert_finetuned/bert_embeddings filter=lfs diff=lfs merge=lfs -text
 data/raw/amazon_reviews_llm_annotated.csv filter=lfs diff=lfs merge=lfs -text
+models/bert_finetuned/v2/test_embeddings.npy filter=lfs diff=lfs merge=lfs -text
+models/bert_finetuned/v2/model.safetensors filter=lfs diff=lfs merge=lfs -text
+models/bert_finetuned/v2/train_embeddings.npy filter=lfs diff=lfs merge=lfs -text
 *.safetensors filter=lfs diff=lfs merge=lfs -text
 *.npy filter=lfs diff=lfs merge=lfs -text
